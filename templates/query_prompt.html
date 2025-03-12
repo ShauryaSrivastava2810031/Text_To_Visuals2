@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Query Operations</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4 text-center">
+        <h3>Table '{{ table_name }}' successfully created.</h3>
+        <p>Would you like to perform query-related operations on this table?</p>
+        <form action="{{ url_for('redirect_to_query') }}" method="post">
+            <button type="submit" class="btn btn-success">Yes, Proceed</button>
+            <a href="{{ url_for('upload_file') }}" class="btn btn-danger">No, Upload Another</a>
+        </form>
+    </div>
+</body>
+</html>
