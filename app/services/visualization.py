@@ -15,6 +15,8 @@ _TIME_PREFERRED = ["Line Chart", "Bar Chart", "Area Chart"]
 
 # App-aligned categorical palette + chart styling.
 _PALETTE = ["#6366f1", "#a855f7", "#ec4899", "#f59e0b", "#10b981", "#06b6d4", "#ef4444"]
+_ACCENT = "#6366f1"
+_ACCENT_FILL = "rgba(99, 102, 241, 0.16)"
 _FONT = "Inter, -apple-system, 'Segoe UI', Roboto, sans-serif"
 _GRID = "#eef0f3"
 _AXIS = "#e4e7eb"
@@ -111,46 +113,66 @@ def _log_usage(result):
 def _style_figure(fig, chart_type):
     """Apply the app's visual theme + interactivity to a Plotly figure."""
     fig.update_layout(
-        height=460,
+        height=470,
         template="plotly_white",
         colorway=_PALETTE,
         font=dict(family=_FONT, size=13, color=_INK),
-        title=dict(font=dict(family=_FONT, size=16, color=_INK), x=0.01, xanchor="left"),
+        title=dict(
+            font=dict(family=_FONT, size=18, color=_INK),
+            x=0.012, xanchor="left", y=0.955, yanchor="top",
+        ),
         paper_bgcolor="white",
         plot_bgcolor="white",
-        margin=dict(l=60, r=28, t=54, b=60),
+        margin=dict(l=64, r=32, t=72, b=56),
         hoverlabel=dict(
-            bgcolor="white", bordercolor=_AXIS, font=dict(family=_FONT, size=13, color=_INK)
+            bgcolor="white", bordercolor=_AXIS,
+            font=dict(family=_FONT, size=13, color=_INK),
         ),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(family=_FONT)),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(family=_FONT, size=12)),
+        colorscale=dict(sequential=[[0, "#c7c9f6"], [1, _ACCENT]]),
     )
     fig.update_xaxes(
         showgrid=False, showline=True, linecolor=_AXIS, linewidth=1,
-        ticks="outside", tickcolor=_AXIS, title_font=dict(size=13),
+        ticks="outside", tickcolor=_AXIS, ticklen=6, title_font=dict(size=13),
+        tickfont=dict(size=12),
     )
     fig.update_yaxes(
-        showgrid=True, gridcolor=_GRID, zeroline=False, showline=False,
-        title_font=dict(size=13),
+        showgrid=True, gridcolor=_GRID, zeroline=False, showline=False, ticks="",
+        title_font=dict(size=13), tickfont=dict(size=12),
     )
 
-    if chart_type in ("Line Chart", "Area Chart"):
-        fig.update_traces(line=dict(width=2.75), mode="lines+markers",
-                          marker=dict(size=6))
+    _spikes = dict(showspikes=True, spikecolor="#c7ccd4", spikethickness=1,
+                   spikedash="dot", spikemode="across", spikesnap="cursor")
+    _slider = dict(rangeslider=dict(visible=True, thickness=0.07, bgcolor="#f4f5f7"))
+
+    if chart_type == "Line Chart":
+        fig.update_traces(line=dict(width=3, color=_ACCENT),
+                          mode="lines+markers", marker=dict(size=5, color=_ACCENT))
         fig.update_layout(hovermode="x unified")
+        fig.update_xaxes(**_spikes, **_slider)
+    elif chart_type == "Area Chart":
+        fig.update_traces(line=dict(width=2.5, color=_ACCENT), mode="lines",
+                          fill="tozeroy", fillcolor=_ACCENT_FILL)
+        fig.update_layout(hovermode="x unified")
+        fig.update_xaxes(**_spikes, **_slider)
     elif chart_type == "Scatter Plot":
-        fig.update_traces(marker=dict(size=10, opacity=0.82,
-                                      line=dict(width=1, color="white")))
+        fig.update_traces(marker=dict(size=11, color=_ACCENT, opacity=0.8,
+                                      line=dict(width=1.5, color="white")))
+        fig.update_xaxes(**_spikes)
+        fig.update_yaxes(showspikes=True, spikecolor="#c7ccd4", spikethickness=1,
+                         spikedash="dot", spikemode="across")
     elif chart_type == "Bar Chart":
-        fig.update_traces(marker_line_width=0, marker_color=_PALETTE[0])
-        fig.update_layout(bargap=0.28)
-    elif chart_type == "Pie Chart":
-        fig.update_traces(hole=0.5, textposition="outside", textinfo="percent+label",
-                          marker=dict(line=dict(color="white", width=2)))
-        fig.update_layout(showlegend=False)
+        fig.update_traces(marker=dict(color=_ACCENT, cornerradius=6, line_width=0))
+        fig.update_layout(bargap=0.32)
     elif chart_type == "Histogram":
-        fig.update_traces(marker_color=_PALETTE[0], marker_line_width=0,
-                          opacity=0.9)
-        fig.update_layout(bargap=0.06)
+        fig.update_traces(marker=dict(color=_ACCENT, line=dict(color="white", width=1)),
+                          opacity=0.92)
+        fig.update_layout(bargap=0.05)
+    elif chart_type == "Pie Chart":
+        fig.update_traces(hole=0.58, textposition="outside", textinfo="percent+label",
+                          marker=dict(line=dict(color="white", width=2)),
+                          insidetextorientation="radial")
+        fig.update_layout(showlegend=False)
     return fig
 
 
