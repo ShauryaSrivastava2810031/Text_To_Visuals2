@@ -1,85 +1,125 @@
-"""LLM access: Gemini client, SQL agent construction, and safe invocation."""
+"""LLM access via PydanticAI.
+
+Provider-agnostic: the active model is chosen by config (`LLM_PROVIDER` +
+`LLM_MODEL`) and supports Google Gemini, OpenAI, and Anthropic.
+"""
 
 import re
 import time
 
 from flask import current_app
-from langchain.agents import AgentType
-from langchain_community.agent_toolkits.sql.base import create_sql_agent
-from langchain_community.utilities.sql_database import SQLDatabase
-from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic_ai import Agent
 
-# Prompt prepended to user questions when generating SQL.
-SQL_PROMPT = """
-You are an AI assistant that converts natural language questions into SQL queries.
-Your task is to generate only the SQL query without explanations, comments, or extra text.
+from .schemas import SqlQuery
 
-- Database: PostgreSQL
-- Schema: Assume the database structure is already known to you.
-- Constraints:
-    1. Only return the SQL query. No extra text, explanations, or comments.
-    2. Ensure correctness with proper column names and table references.
-    3. Avoid assumptions if data is unavailable—return a valid, structured SQL query.
-    4. Even if your final answer is a number, still return the SQL query as the final answer.
-    5. Don't use unasked and unnecessary LIMIT keyword.
+# System prompt for the text-to-SQL agent. Structured output guarantees we get
+# only a SQL string back, so the old "return only the query" plumbing is gone.
+SQL_SYSTEM_PROMPT = """
+You are an expert data analyst that converts natural language questions into SQL.
 
-Now, generate the SQL query for:
+- Dialect: PostgreSQL.
+- You are given the target table name and its columns in the user message.
+- Produce a single, correct SELECT query that answers the question.
+- Use the exact column and table names provided; do not invent columns.
+- Do not add a LIMIT unless the question explicitly asks for one.
+- Do not include comments, explanations, or markdown fences.
 """
 
-_llm = None
+_model = None
+_sql_agent = None
 
 
-def get_llm():
-    """Return a lazily-created, cached Gemini chat model."""
-    global _llm
-    if _llm is None:
-        api_key = current_app.config["GOOGLE_API_KEY"]
-        if not api_key:
-            raise RuntimeError(
-                "GOOGLE_API_KEY is not set. Add it to your .env file."
-            )
-        _llm = ChatGoogleGenerativeAI(
-            model=current_app.config["GEMINI_MODEL"],
-            google_api_key=api_key,
-            temperature=0,
+def _require_key(config_key):
+    key = current_app.config.get(config_key)
+    if not key:
+        raise RuntimeError(f"{config_key} is not set. Add it to your .env file.")
+    return key
+
+
+def _build_model():
+    """Construct the configured provider's model. Imports are lazy so only the
+    active provider's SDK needs to be importable."""
+    provider = current_app.config["LLM_PROVIDER"].lower()
+    model_name = current_app.config["LLM_MODEL"]
+
+    if provider in ("google", "gemini", "google-gla"):
+        from pydantic_ai.models.google import GoogleModel
+        from pydantic_ai.providers.google import GoogleProvider
+
+        return GoogleModel(
+            model_name, provider=GoogleProvider(api_key=_require_key("GOOGLE_API_KEY"))
         )
-    return _llm
 
+    if provider == "openai":
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
 
-def get_sql_database():
-    """Build a LangChain SQLDatabase from the configured URI."""
-    return SQLDatabase.from_uri(current_app.config["DATABASE_URL"])
+        return OpenAIChatModel(
+            model_name, provider=OpenAIProvider(api_key=_require_key("OPENAI_API_KEY"))
+        )
 
+    if provider == "anthropic":
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
 
-def build_sql_agent(db=None):
-    """Create a SQL agent bound to the given (or freshly loaded) database."""
-    if db is None:
-        db = get_sql_database()
-    return create_sql_agent(
-        llm=get_llm(),
-        db=db,
-        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True,
-    )
-
-
-def safe_agent_run(agent, prompt, max_retries=5):
-    """Run the agent, handling Gemini rate limits with exponential backoff."""
-    retries = 0
-    while retries < max_retries:
-        try:
-            return agent.run(prompt).strip()
-        except Exception as e:
-            error_message = str(e)
-            if "429 You exceeded your current quota" in error_message:
-                match = re.search(r"retry_delay {\s*seconds: (\d+)", error_message)
-                retry_time = int(match.group(1)) if match else (2 ** retries)
-                print(f"Rate limit exceeded. Retrying in {retry_time} seconds...")
-                time.sleep(retry_time)
-                retries += 1
-            else:
-                raise e
+        return AnthropicModel(
+            model_name,
+            provider=AnthropicProvider(api_key=_require_key("ANTHROPIC_API_KEY")),
+        )
 
     raise RuntimeError(
-        "Max retries reached for Gemini API call. Please check your quota."
+        f"Unsupported LLM_PROVIDER {provider!r}. Use 'google', 'openai', or 'anthropic'."
     )
+
+
+def get_model():
+    """Return the lazily-created, cached model for the configured provider."""
+    global _model
+    if _model is None:
+        _model = _build_model()
+    return _model
+
+
+def get_sql_agent():
+    """Return the lazily-created text-to-SQL agent."""
+    global _sql_agent
+    if _sql_agent is None:
+        _sql_agent = Agent(
+            get_model(), output_type=SqlQuery, system_prompt=SQL_SYSTEM_PROMPT
+        )
+    return _sql_agent
+
+
+def run_with_backoff(fn, max_retries=5):
+    """Run `fn`, retrying on rate-limit / quota errors with exponential backoff.
+
+    Works across providers by matching common rate-limit signals in the error.
+    """
+    retries = 0
+    while True:
+        try:
+            return fn()
+        except Exception as e:
+            message = str(e)
+            rate_limited = "429" in message or "quota" in message.lower() or (
+                "rate" in message.lower() and "limit" in message.lower()
+            )
+            if rate_limited and retries < max_retries:
+                match = re.search(r"retry_delay {\s*seconds: (\d+)", message)
+                wait = int(match.group(1)) if match else (2 ** retries)
+                print(f"Rate limit hit. Retrying in {wait}s...")
+                time.sleep(wait)
+                retries += 1
+                continue
+            raise
+
+
+def generate_sql(question, table_name, schema_text):
+    """Generate a SQL query for `question` against the given table + schema."""
+    user_prompt = (
+        f"Table name: {table_name}\n"
+        f"Columns: {schema_text}\n\n"
+        f"Write a PostgreSQL query that answers: {question}"
+    )
+    result = run_with_backoff(lambda: get_sql_agent().run_sync(user_prompt))
+    return result.output.sql

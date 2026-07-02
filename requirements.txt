@@ -7,7 +7,5 @@ werkzeug
 python-dotenv
 plotly
 openpyxl
-langchain
-langchain-community
-langchain-google-genai
+pydantic-ai-slim[google,openai,anthropic]
 gunicorn

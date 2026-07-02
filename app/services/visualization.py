@@ -1,95 +1,62 @@
-"""Visualization: AI chart suggestions and Plotly chart rendering."""
-
-import ast
-import re
+"""Visualization: AI chart suggestions (typed) and Plotly chart rendering."""
 
 import plotly.express as px
-from langchain.agents import AgentType, initialize_agent
-from langchain.memory import ConversationBufferMemory
-from langchain.tools import Tool
+from pydantic_ai import Agent
 
-from .llm import get_llm
+from .llm import get_model, run_with_backoff
+from .schemas import ChartSuggestions
 
-# Charts that make sense to prioritize when the dataset is time-based.
+# Charts to prioritize when the dataset is time-based.
 _TIME_PREFERRED = ["Line Chart", "Bar Chart", "Area Chart"]
 
+VIZ_SYSTEM_PROMPT = """
+You are a data visualization expert. Given a dataset's columns and a small
+sample, recommend exactly three suitable chart types. Guidelines:
+- Prefer "Line Chart" for time-based trends.
+- Prefer "Bar Chart" for categorical vs numerical comparisons.
+- Prefer "Area Chart" for cumulative time-based trends.
+- Prefer "Pie Chart" for categorical distributions.
+- Prefer "Scatter Plot" for numerical relationships.
+- Prefer "Histogram" for single-column numeric distributions.
+"""
 
-def _parse_chart_list(response):
-    """Safely parse the LLM response into a list of exactly three chart names.
+_viz_agent = None
 
-    Uses ast.literal_eval (never eval) and tolerates surrounding prose by
-    extracting the first bracketed list found in the text.
-    """
-    candidate = response.strip()
-    match = re.search(r"\[.*\]", candidate, re.DOTALL)
-    if match:
-        candidate = match.group(0)
 
-    parsed = ast.literal_eval(candidate)
-    if not isinstance(parsed, list) or len(parsed) != 3:
-        raise ValueError("Expected a list of exactly three chart suggestions")
-    return parsed
+def _get_viz_agent():
+    global _viz_agent
+    if _viz_agent is None:
+        _viz_agent = Agent(
+            get_model(), output_type=ChartSuggestions, system_prompt=VIZ_SYSTEM_PROMPT
+        )
+    return _viz_agent
 
 
 def analyze_visualization(df):
-    """Ask the LLM for the top three visualizations for the given DataFrame."""
+    """Return up to three recommended chart names for the given DataFrame."""
     sample_data = df.head(5).to_dict(orient="records")
     column_info = {col: str(df[col].dtype) for col in df.columns}
-
     contains_time_column = any(
         dtype in ["datetime64[ns]", "DATE", "TIMESTAMP"]
         for dtype in column_info.values()
     )
 
-    visualization_prompt = f"""
-    You are a data visualization expert.
-    Analyze the following dataset structure and suggest the best visualization techniques.
-
-    Column Information: {column_info}
-    Sample Data: {sample_data}
-
-    Rules:
-    - Prefer "Line Chart" for time-based trends (e.g., sales over months).
-    - Prefer "Bar Chart" for categorical vs numerical comparisons.
-    - Prefer "Area Chart" for cumulative time-based data trends.
-    - Prefer "Pie Chart" for categorical distributions.
-    - Prefer "Scatter Plot" for numerical relationships.
-    - Prefer "Histogram" for single-column numeric distributions.
-    - Return exactly three suggestions in a Python list format.
-
-    Now, suggest the best charts:
-    """
-
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    tools = [
-        Tool(
-            name="Visualization Suggestion",
-            func=lambda x: x,
-            description="Suggest best charts",
-        )
-    ]
-
-    visualization_agent = initialize_agent(
-        tools=tools,
-        llm=get_llm(),
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        memory=memory,
-        verbose=True,
+    prompt = (
+        f"Column Information: {column_info}\n"
+        f"Sample Data: {sample_data}\n\n"
+        f"Suggest the best three charts."
     )
 
-    response = visualization_agent.run(visualization_prompt)
-
     try:
-        chart_suggestions = _parse_chart_list(response)
-        if contains_time_column:
-            chart_suggestions = sorted(
-                chart_suggestions,
-                key=lambda x: x in _TIME_PREFERRED,
-                reverse=True,
-            )
-    except (ValueError, SyntaxError):
-        chart_suggestions = []  # AI must provide valid output; no hardcoded fallback
+        result = run_with_backoff(lambda: _get_viz_agent().run_sync(prompt))
+        chart_suggestions = [chart.value for chart in result.output.charts]
+    except Exception:
+        return []  # let the caller render without suggestions
 
+    if contains_time_column:
+        chart_suggestions = sorted(
+            chart_suggestions, key=lambda x: x in _TIME_PREFERRED, reverse=True
+        )
     return chart_suggestions
 
 

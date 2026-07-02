@@ -58,6 +58,12 @@ def list_tables():
     return inspect(get_engine()).get_table_names()
 
 
+def get_table_schema(table_name):
+    """Return a compact "col TYPE, col TYPE" description for the LLM prompt."""
+    columns = inspect(get_engine()).get_columns(table_name)
+    return ", ".join(f"{col['name']} {col['type']}" for col in columns)
+
+
 def drop_all_tables():
     """Drop every table in the database (matches original reset behavior)."""
     engine = get_engine()
