@@ -1,9 +1,9 @@
-"""Chart generation route (AJAX)."""
+"""Chart data route (AJAX) — returns JSON for the frontend ECharts renderer."""
 
-from flask import Blueprint, request
+from flask import Blueprint, jsonify, request
 
 from ..services.runtime import runtime
-from ..services.visualization import build_chart
+from ..services.visualization import build_chart_payload
 
 chart_bp = Blueprint("chart", __name__)
 
@@ -13,6 +13,6 @@ def generate_chart():
     chart_type = request.form.get("chart_type")
 
     if runtime.df is None or runtime.df.empty:
-        return "<div class='alert alert-warning'>No data available for visualization.</div>"
+        return jsonify({"error": "No data available for visualization."})
 
-    return build_chart(runtime.df, chart_type)
+    return jsonify(build_chart_payload(runtime.df, chart_type))

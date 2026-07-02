@@ -2,7 +2,8 @@
 
 A Flask app that turns natural-language questions into SQL (via PydanticAI,
 provider-agnostic across Google Gemini, OpenAI, and Anthropic), runs them
-against a PostgreSQL database, and renders Plotly charts from the results.
+against a PostgreSQL database, and renders interactive Apache ECharts from the
+results (rendered in the browser; the backend just serves the chart data).
 
 ## Project structure
 
@@ -17,7 +18,7 @@ app/
     runtime.py             # in-memory holder for the active DataFrame
     database.py            # engine, name/type inference, table + schema helpers
     llm.py                 # provider-agnostic model + text-to-SQL agent
-    visualization.py       # AI chart suggestions (typed) + Plotly rendering
+    visualization.py       # AI chart suggestions (typed) + chart data payloads
   blueprints/
     main.py                # "/" upload, "/home" reset
     query.py               # "/query" NL->SQL, "/download_csv"
