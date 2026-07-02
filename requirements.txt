@@ -6,6 +6,7 @@ psycopg2-binary
 werkzeug
 python-dotenv
 plotly
+openpyxl
 langchain
 langchain-community
 langchain-google-genai
