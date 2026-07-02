@@ -30,14 +30,24 @@ _PLOT_CONFIG = {
 }
 
 VIZ_SYSTEM_PROMPT = """
-You are a data visualization expert. Given a dataset's columns and a small
-sample, recommend exactly three suitable chart types. Guidelines:
-- Prefer "Line Chart" for time-based trends.
-- Prefer "Bar Chart" for categorical vs numerical comparisons.
-- Prefer "Area Chart" for cumulative time-based trends.
-- Prefer "Pie Chart" for categorical distributions.
-- Prefer "Scatter Plot" for numerical relationships.
-- Prefer "Histogram" for single-column numeric distributions.
+You are a data-visualization expert. Given the columns (with types) and a sample
+of a query RESULT, recommend the three most suitable chart types, best first.
+
+The app renders a chart from the first two result columns: the first column is
+the x-axis (category, label, or date) and the second is the y-axis (numeric
+measure). Recommend charts that fit that shape and the column types.
+
+Choose only from these exact names:
+"Bar Chart", "Line Chart", "Area Chart", "Pie Chart", "Scatter Plot", "Histogram".
+
+Guidance:
+- Date/time column + numeric   -> "Line Chart" or "Area Chart" (trends over time).
+- Categorical column + numeric -> "Bar Chart"; use "Pie Chart" only when there
+  are few categories (<= 6) that represent parts of a whole.
+- Two numeric columns          -> "Scatter Plot" (relationship between values).
+- A single numeric column      -> "Histogram" (distribution).
+
+Return three distinct charts that are genuinely appropriate for this result.
 """
 
 _viz_agent = None
@@ -62,9 +72,9 @@ def analyze_visualization(df):
     )
 
     prompt = (
-        f"Column Information: {column_info}\n"
-        f"Sample Data: {sample_data}\n\n"
-        f"Suggest the best three charts."
+        f"Result columns and types: {column_info}\n"
+        f"Sample rows: {sample_data}\n\n"
+        f"Recommend the best three charts for this result."
     )
 
     logger.info(

@@ -18,14 +18,25 @@ logger = logging.getLogger("t2v.llm")
 # System prompt for the text-to-SQL agent. Structured output guarantees we get
 # only a SQL string back, so the old "return only the query" plumbing is gone.
 SQL_SYSTEM_PROMPT = """
-You are an expert data analyst that converts natural language questions into SQL.
+You convert a natural-language question into a single PostgreSQL query.
 
-- Dialect: PostgreSQL.
-- You are given the target table name and its columns in the user message.
-- Produce a single, correct SELECT query that answers the question.
-- Use the exact column and table names provided; do not invent columns.
-- Do not add a LIMIT unless the question explicitly asks for one.
-- Do not include comments, explanations, or markdown fences.
+Rules:
+- Read-only: output exactly ONE SELECT statement. Never INSERT, UPDATE, DELETE,
+  DROP, ALTER, TRUNCATE, or return multiple statements.
+- Use only the table and columns given in the user message. Never invent
+  columns or reference other tables.
+- Match the exact column names provided. If an identifier is a reserved word or
+  contains uppercase or special characters, wrap it in double quotes.
+- For text filters, match case-insensitively (use ILIKE, or
+  LOWER(col) = LOWER('value')).
+- When aggregating, include every non-aggregated selected column in GROUP BY and
+  give aggregates clear aliases (e.g. SUM(amount) AS total_amount).
+- For "top/bottom N" questions, use ORDER BY ... DESC/ASC with LIMIT N.
+- Do not add LIMIT unless the question asks for a specific number of rows.
+- Chart-friendly ordering: when the result is a grouped or time-based summary,
+  put the category/label/date column FIRST and the numeric measure SECOND.
+- If the question is ambiguous, choose the most reasonable interpretation.
+- Return only the SQL: no comments, explanations, or markdown fences.
 """
 
 _model = None
@@ -131,9 +142,9 @@ def run_with_backoff(fn, max_retries=5):
 def generate_sql(question, table_name, schema_text):
     """Generate a SQL query for `question` against the given table + schema."""
     user_prompt = (
-        f"Table name: {table_name}\n"
-        f"Columns: {schema_text}\n\n"
-        f"Write a PostgreSQL query that answers: {question}"
+        f"Table: {table_name}\n"
+        f"Columns (name and type): {schema_text}\n\n"
+        f"Question: {question}"
     )
     logger.info("SQL generation request | table=%s | question=%r", table_name, question)
     logger.debug("Schema passed to model: %s", schema_text)
