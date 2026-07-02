@@ -12,6 +12,9 @@ class Config:
     # Flask
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me")
 
+    # Logging verbosity for the "t2v" loggers: INFO (default) or DEBUG
+    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
     # LLM — provider-agnostic (google | openai | anthropic | openrouter)
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
     LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")

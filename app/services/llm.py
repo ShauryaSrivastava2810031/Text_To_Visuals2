@@ -4,6 +4,7 @@ Provider-agnostic: the active model is chosen by config (`LLM_PROVIDER` +
 `LLM_MODEL`) and supports Google Gemini, OpenAI, and Anthropic.
 """
 
+import logging
 import re
 import time
 
@@ -11,6 +12,8 @@ from flask import current_app
 from pydantic_ai import Agent
 
 from .schemas import SqlQuery
+
+logger = logging.getLogger("t2v.llm")
 
 # System prompt for the text-to-SQL agent. Structured output guarantees we get
 # only a SQL string back, so the old "return only the query" plumbing is gone.
@@ -41,6 +44,7 @@ def _build_model():
     active provider's SDK needs to be importable."""
     provider = current_app.config["LLM_PROVIDER"].lower()
     model_name = current_app.config["LLM_MODEL"]
+    logger.info("Building LLM model | provider=%s | model=%s", provider, model_name)
 
     if provider in ("google", "gemini", "google-gla"):
         from pydantic_ai.models.google import GoogleModel
@@ -131,5 +135,15 @@ def generate_sql(question, table_name, schema_text):
         f"Columns: {schema_text}\n\n"
         f"Write a PostgreSQL query that answers: {question}"
     )
+    logger.info("SQL generation request | table=%s | question=%r", table_name, question)
+    logger.debug("Schema passed to model: %s", schema_text)
+
     result = run_with_backoff(lambda: get_sql_agent().run_sync(user_prompt))
-    return result.output.sql
+    sql = result.output.sql
+
+    logger.info("Generated SQL: %s", sql)
+    try:
+        logger.info("LLM usage: %s", result.usage())
+    except Exception:
+        pass
+    return sql
