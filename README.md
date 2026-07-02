@@ -53,6 +53,7 @@ provider and model in `.env`:
 | `google`       | `gemini-2.0-flash`  | `GOOGLE_API_KEY` |
 | `openai`       | `gpt-4o`            | `OPENAI_API_KEY` |
 | `anthropic`    | `claude-sonnet-4-5` | `ANTHROPIC_API_KEY` |
+| `openrouter`   | `openai/gpt-4o-mini` | `OPENROUTER_API_KEY` |
 
 Only the active provider's key is required.
 

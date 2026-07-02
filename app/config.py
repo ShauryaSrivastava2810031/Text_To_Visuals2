@@ -12,7 +12,7 @@ class Config:
     # Flask
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-insecure-change-me")
 
-    # LLM — provider-agnostic (google | openai | anthropic)
+    # LLM — provider-agnostic (google | openai | anthropic | openrouter)
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "google")
     LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.0-flash")
 
@@ -20,6 +20,7 @@ class Config:
     GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
     # Database
     DATABASE_URL = os.getenv(

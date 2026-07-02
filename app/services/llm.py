@@ -58,6 +58,15 @@ def _build_model():
             model_name, provider=OpenAIProvider(api_key=_require_key("OPENAI_API_KEY"))
         )
 
+    if provider == "openrouter":
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+        return OpenAIChatModel(
+            model_name,
+            provider=OpenRouterProvider(api_key=_require_key("OPENROUTER_API_KEY")),
+        )
+
     if provider == "anthropic":
         from pydantic_ai.models.anthropic import AnthropicModel
         from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -68,7 +77,8 @@ def _build_model():
         )
 
     raise RuntimeError(
-        f"Unsupported LLM_PROVIDER {provider!r}. Use 'google', 'openai', or 'anthropic'."
+        f"Unsupported LLM_PROVIDER {provider!r}. "
+        "Use 'google', 'openai', 'anthropic', or 'openrouter'."
     )
 
 
