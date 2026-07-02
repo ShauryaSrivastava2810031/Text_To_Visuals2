@@ -23,7 +23,6 @@ from ..services.database import (
     replace_table_with_dataframe,
     sanitize_column_name,
 )
-from ..services.llm import build_sql_agent, get_sql_database
 from ..services.runtime import runtime
 
 main_bp = Blueprint("main", __name__)
@@ -51,7 +50,6 @@ def upload_file():
         # Reuse the table if it already exists.
         if table_name in list_tables():
             session["table_name"] = table_name
-            runtime.sql_agent = build_sql_agent(get_sql_database())
             return redirect(url_for("query.query_interface"))
 
         # Save the uploaded file.
@@ -73,7 +71,6 @@ def upload_file():
         cache.clear()
         session["table_name"] = table_name
         runtime.df = df
-        runtime.sql_agent = build_sql_agent(get_sql_database())
 
         return redirect(url_for("query.query_interface"))
 
@@ -84,7 +81,6 @@ def upload_file():
 def home():
     """Reset everything: drop all tables, clear cache and session."""
     runtime.df = None
-    runtime.sql_agent = None
 
     drop_all_tables()
 

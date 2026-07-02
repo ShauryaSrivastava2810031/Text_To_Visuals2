@@ -6,8 +6,8 @@ import pandas as pd
 from flask import Blueprint, Response, current_app, render_template, request, session
 
 from ..extensions import cache
-from ..services.database import get_engine
-from ..services.llm import SQL_PROMPT, safe_agent_run
+from ..services.database import get_engine, get_table_schema
+from ..services.llm import generate_sql
 from ..services.runtime import runtime
 from ..services.visualization import analyze_visualization
 
@@ -21,20 +21,16 @@ def query_interface():
 
     if request.method == "POST":
         question = request.form["question"]
-        contextual_prompt = (
-            f"You are working with a table named '{table_name}'. "
-            f"Answer the following query accordingly: {question}"
-        )
+        cache_key = f"{table_name}:{question}"
 
-        cached_response = cache.get(contextual_prompt)
+        cached_response = cache.get(cache_key)
         if cached_response:
             sql_query, df_json, chart_suggestions = cached_response
             runtime.df = pd.read_json(StringIO(df_json))
         else:
             try:
-                sql_query = safe_agent_run(
-                    runtime.sql_agent, SQL_PROMPT + contextual_prompt
-                )
+                schema_text = get_table_schema(table_name)
+                sql_query = generate_sql(question, table_name, schema_text)
                 with get_engine().connect() as conn:
                     runtime.df = pd.read_sql_query(sql_query, conn)
 
@@ -46,7 +42,7 @@ def query_interface():
                 chart_suggestions = analyze_visualization(runtime.df) or []
                 # Cache under the same key used for lookup above.
                 cache.set(
-                    contextual_prompt,
+                    cache_key,
                     (sql_query, runtime.df.to_json(), chart_suggestions),
                 )
             except Exception as e:
