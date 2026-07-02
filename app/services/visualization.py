@@ -91,4 +91,6 @@ def build_chart(df, chart_type):
     if fig is None:
         return "<div class='alert alert-warning'>Invalid chart type selected.</div>"
 
-    return fig.to_html(full_html=False)
+    # Plotly.js is loaded once from the CDN in the page; emit only the chart div
+    # + init script so each fragment stays small.
+    return fig.to_html(full_html=False, include_plotlyjs=False)
