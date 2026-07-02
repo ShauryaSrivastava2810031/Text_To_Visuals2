@@ -91,6 +91,17 @@ def build_chart(df, chart_type):
     if fig is None:
         return "<div class='alert alert-warning'>Invalid chart type selected.</div>"
 
+    # Give the figure an explicit height (the injected div would otherwise be
+    # height:100% inside an auto-height container and collapse to nothing), and
+    # a light, readable surface regardless of page theme.
+    fig.update_layout(
+        height=460,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font_color="#16181d",
+        margin=dict(l=48, r=24, t=36, b=48),
+    )
+
     # Plotly.js is loaded once from the CDN in the page; emit only the chart div
     # + init script so each fragment stays small.
     return fig.to_html(full_html=False, include_plotlyjs=False)
