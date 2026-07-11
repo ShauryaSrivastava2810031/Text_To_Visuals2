@@ -38,16 +38,15 @@ def detect_column_type(series):
 
     if all(any(re.match(p, v) for p in date_patterns) for v in sample_values if v):
         return "DATE"
-    elif all(any(re.match(p, v) for p in time_patterns) for v in sample_values if v):
+    if all(any(re.match(p, v) for p in time_patterns) for v in sample_values if v):
         return "TIME"
-    elif all(any(re.match(p, v) for p in datetime_patterns) for v in sample_values if v):
+    if all(any(re.match(p, v) for p in datetime_patterns) for v in sample_values if v):
         return "TIMESTAMP"
-    elif pd.api.types.is_integer_dtype(series):
+    if pd.api.types.is_integer_dtype(series):
         return "INTEGER"
-    elif pd.api.types.is_float_dtype(series):
+    if pd.api.types.is_float_dtype(series):
         return "DECIMAL"
-    else:
-        return "TEXT"
+    return "TEXT"
 
 
 def list_tables():

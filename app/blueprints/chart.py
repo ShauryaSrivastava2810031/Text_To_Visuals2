@@ -10,6 +10,7 @@ chart_bp = Blueprint("chart", __name__)
 
 @chart_bp.route("/generate_chart", methods=["POST"])
 def generate_chart():
+    """To Generate Chart"""
     chart_type = request.form.get("chart_type")
 
     if runtime.df is None or runtime.df.empty:

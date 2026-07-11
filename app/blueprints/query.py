@@ -61,7 +61,7 @@ def query_interface():
             "index.html",
             question=question,
             query=sql_query,
-            table=df.to_html(classes="table table-stripped"),
+            table=df.to_html(classes="table"),
             chart_options=chart_suggestions,
         )
 
