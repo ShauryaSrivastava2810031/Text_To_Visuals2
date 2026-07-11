@@ -7,15 +7,15 @@ import sqlalchemy
 from flask import current_app
 from sqlalchemy import create_engine, inspect
 
-_engine = None
+# Lazily-created singleton (module-level cache; avoids the `global` statement).
+_cache = {"engine": None}
 
 
 def get_engine():
     """Return a lazily-created, cached SQLAlchemy engine."""
-    global _engine
-    if _engine is None:
-        _engine = create_engine(current_app.config["DATABASE_URL"])
-    return _engine
+    if _cache["engine"] is None:
+        _cache["engine"] = create_engine(current_app.config["DATABASE_URL"])
+    return _cache["engine"]
 
 
 def sanitize_column_name(name):

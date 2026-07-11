@@ -1,4 +1,5 @@
 import os
+from typing import ClassVar
 
 from dotenv import load_dotenv
 
@@ -36,7 +37,7 @@ class Config:
 
     # Uploads
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
-    ALLOWED_EXTENSIONS = {"csv", "xlsx"}
+    ALLOWED_EXTENSIONS: ClassVar[set[str]] = {"csv", "xlsx"}
 
     # Rendering
     MAX_TABLE_ROWS = 100  # above this, offer a CSV download instead of a table

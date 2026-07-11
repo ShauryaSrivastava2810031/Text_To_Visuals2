@@ -4,6 +4,7 @@ Provider-agnostic: the active model is chosen by config (`LLM_PROVIDER` +
 `LLM_MODEL`) and supports Google Gemini, OpenAI, and Anthropic.
 """
 
+import contextlib
 import logging
 import re
 import time
@@ -39,8 +40,8 @@ Rules:
 - Return only the SQL: no comments, explanations, or markdown fences.
 """
 
-_model = None
-_sql_agent = None
+# Lazily-created singletons (module-level cache; avoids the `global` statement).
+_cache = {"model": None, "sql_agent": None}
 
 
 def _require_key(config_key):
@@ -99,20 +100,18 @@ def _build_model():
 
 def get_model():
     """Return the lazily-created, cached model for the configured provider."""
-    global _model
-    if _model is None:
-        _model = _build_model()
-    return _model
+    if _cache["model"] is None:
+        _cache["model"] = _build_model()
+    return _cache["model"]
 
 
 def get_sql_agent():
     """Return the lazily-created text-to-SQL agent."""
-    global _sql_agent
-    if _sql_agent is None:
-        _sql_agent = Agent(
+    if _cache["sql_agent"] is None:
+        _cache["sql_agent"] = Agent(
             get_model(), output_type=SqlQuery, system_prompt=SQL_SYSTEM_PROMPT
         )
-    return _sql_agent
+    return _cache["sql_agent"]
 
 
 def run_with_backoff(fn, max_retries=5):
@@ -132,7 +131,7 @@ def run_with_backoff(fn, max_retries=5):
             if rate_limited and retries < max_retries:
                 match = re.search(r"retry_delay {\s*seconds: (\d+)", message)
                 wait = int(match.group(1)) if match else (2 ** retries)
-                print(f"Rate limit hit. Retrying in {wait}s...")
+                logger.warning("Rate limit hit. Retrying in %ss...", wait)
                 time.sleep(wait)
                 retries += 1
                 continue
@@ -153,8 +152,6 @@ def generate_sql(question, table_name, schema_text):
     sql = result.output.sql
 
     logger.info("Generated SQL: %s", sql)
-    try:
+    with contextlib.suppress(Exception):
         logger.info("LLM usage: %s", result.usage())
-    except Exception:
-        pass
     return sql

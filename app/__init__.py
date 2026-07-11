@@ -35,9 +35,9 @@ def create_app(config_class=Config):
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
     # Register blueprints
+    from .blueprints.chart import chart_bp
     from .blueprints.main import main_bp
     from .blueprints.query import query_bp
-    from .blueprints.chart import chart_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(query_bp)

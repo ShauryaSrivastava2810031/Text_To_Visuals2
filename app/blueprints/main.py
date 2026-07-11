@@ -58,10 +58,11 @@ def upload_file():
         file.save(filepath)
 
         # Load into a DataFrame.
-        if filename.endswith(".csv"):
-            df = pd.read_csv(filepath)
-        else:
-            df = pd.read_excel(filepath)
+        df = (
+            pd.read_csv(filepath)
+            if filename.endswith(".csv")
+            else pd.read_excel(filepath)
+        )
 
         df.columns = [sanitize_column_name(col) for col in df.columns]
 

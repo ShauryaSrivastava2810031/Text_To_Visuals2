@@ -4,6 +4,7 @@ Charts are rendered on the frontend with Apache ECharts. The backend only
 prepares the data (this module); the browser builds and draws the chart.
 """
 
+import contextlib
 import logging
 
 import numpy as np
@@ -39,16 +40,16 @@ Guidance:
 Return three distinct charts that are genuinely appropriate for this result.
 """
 
-_viz_agent = None
+# Lazily-created singleton (module-level cache; avoids the `global` statement).
+_viz_cache = {"agent": None}
 
 
 def _get_viz_agent():
-    global _viz_agent
-    if _viz_agent is None:
-        _viz_agent = Agent(
+    if _viz_cache["agent"] is None:
+        _viz_cache["agent"] = Agent(
             get_model(), output_type=ChartSuggestions, system_prompt=VIZ_SYSTEM_PROMPT
         )
-    return _viz_agent
+    return _viz_cache["agent"]
 
 
 def analyze_visualization(df):
@@ -91,10 +92,8 @@ def analyze_visualization(df):
 
 def _log_usage(result):
     """Best-effort log of token usage from a PydanticAI run result."""
-    try:
+    with contextlib.suppress(Exception):
         logger.info("LLM usage: %s", result.usage())
-    except Exception:
-        pass
 
 
 def build_chart_payload(df, chart_type):
@@ -113,7 +112,7 @@ def build_chart_payload(df, chart_type):
             return {"error": "The first column has no numeric values to plot."}
         bins = int(min(20, max(5, round(len(series) ** 0.5))))
         counts, edges = np.histogram(series, bins=bins)
-        labels = [f"{edges[i]:.0f}–{edges[i + 1]:.0f}" for i in range(len(counts))]
+        labels = [f"{edges[i]:.0f}-{edges[i + 1]:.0f}" for i in range(len(counts))]
         return {
             "chart_type": chart_type, "x_name": cols[0], "y_name": "count",
             "x": labels, "y": [int(v) for v in counts],
@@ -128,7 +127,9 @@ def build_chart_payload(df, chart_type):
         mask = x.notna() & y.notna()
         return {
             "chart_type": chart_type, "x_name": cols[0], "y_name": cols[1],
-            "points": [[float(a), float(b)] for a, b in zip(x[mask], y[mask])],
+            "points": [
+                [float(a), float(b)] for a, b in zip(x[mask], y[mask], strict=False)
+            ],
         }
 
     # Bar / Line / Area / Pie: first column = labels, second = numeric measure.
