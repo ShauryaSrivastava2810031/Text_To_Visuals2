@@ -8,6 +8,7 @@ import contextlib
 import logging
 import re
 import time
+from functools import cache
 
 from flask import current_app
 from pydantic_ai import Agent
@@ -39,10 +40,6 @@ Rules:
 - If the question is ambiguous, choose the most reasonable interpretation.
 - Return only the SQL: no comments, explanations, or markdown fences.
 """
-
-# Lazily-created singletons (module-level cache; avoids the `global` statement).
-_cache = {"model": None, "sql_agent": None}
-
 
 def _require_key(config_key):
     key = current_app.config.get(config_key)
@@ -98,20 +95,16 @@ def _build_model():
     )
 
 
+@cache
 def get_model():
     """Return the lazily-created, cached model for the configured provider."""
-    if _cache["model"] is None:
-        _cache["model"] = _build_model()
-    return _cache["model"]
+    return _build_model()
 
 
+@cache
 def get_sql_agent():
     """Return the lazily-created text-to-SQL agent."""
-    if _cache["sql_agent"] is None:
-        _cache["sql_agent"] = Agent(
-            get_model(), output_type=SqlQuery, system_prompt=SQL_SYSTEM_PROMPT
-        )
-    return _cache["sql_agent"]
+    return Agent(get_model(), output_type=SqlQuery, system_prompt=SQL_SYSTEM_PROMPT)
 
 
 def run_with_backoff(fn, max_retries=5):
@@ -153,5 +146,5 @@ def generate_sql(question, table_name, schema_text):
 
     logger.info("Generated SQL: %s", sql)
     with contextlib.suppress(Exception):
-        logger.info("LLM usage: %s", result.usage())
+        logger.info("LLM usage: %s", result.usage)
     return sql

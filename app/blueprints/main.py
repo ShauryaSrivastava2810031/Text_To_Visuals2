@@ -40,7 +40,7 @@ def upload_file():
             return "No file part"
 
         file = request.files["file"]
-        if file.filename == "":
+        if not file.filename:
             return "No selected file"
         if not allowed_file(file.filename):
             return "Invalid file type"

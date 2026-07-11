@@ -4,10 +4,13 @@ NOTE: This is process-global state carried over from the original single-user
 design. Making it per-session/thread-safe is a follow-up task.
 """
 
+import pandas as pd
+
 
 class Runtime:
     def __init__(self):
-        self.df = None  # latest query result as a pandas DataFrame
+        # Latest query result; None until the first query runs.
+        self.df: pd.DataFrame | None = None
 
 
 runtime = Runtime()

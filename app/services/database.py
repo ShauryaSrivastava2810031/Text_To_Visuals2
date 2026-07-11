@@ -1,21 +1,18 @@
 """Database helpers: engine access, name/type inference, table creation."""
 
 import re
+from functools import cache
 
 import pandas as pd
 import sqlalchemy
 from flask import current_app
 from sqlalchemy import create_engine, inspect
 
-# Lazily-created singleton (module-level cache; avoids the `global` statement).
-_cache = {"engine": None}
 
-
+@cache
 def get_engine():
     """Return a lazily-created, cached SQLAlchemy engine."""
-    if _cache["engine"] is None:
-        _cache["engine"] = create_engine(current_app.config["DATABASE_URL"])
-    return _cache["engine"]
+    return create_engine(current_app.config["DATABASE_URL"])
 
 
 def sanitize_column_name(name):

@@ -6,6 +6,7 @@ prepares the data (this module); the browser builds and draws the chart.
 
 import contextlib
 import logging
+from functools import cache
 
 import numpy as np
 import pandas as pd
@@ -40,16 +41,11 @@ Guidance:
 Return three distinct charts that are genuinely appropriate for this result.
 """
 
-# Lazily-created singleton (module-level cache; avoids the `global` statement).
-_viz_cache = {"agent": None}
-
-
+@cache
 def _get_viz_agent():
-    if _viz_cache["agent"] is None:
-        _viz_cache["agent"] = Agent(
-            get_model(), output_type=ChartSuggestions, system_prompt=VIZ_SYSTEM_PROMPT
-        )
-    return _viz_cache["agent"]
+    return Agent(
+        get_model(), output_type=ChartSuggestions, system_prompt=VIZ_SYSTEM_PROMPT
+    )
 
 
 def analyze_visualization(df):
@@ -93,7 +89,7 @@ def analyze_visualization(df):
 def _log_usage(result):
     """Best-effort log of token usage from a PydanticAI run result."""
     with contextlib.suppress(Exception):
-        logger.info("LLM usage: %s", result.usage())
+        logger.info("LLM usage: %s", result.usage)
 
 
 def build_chart_payload(df, chart_type):
