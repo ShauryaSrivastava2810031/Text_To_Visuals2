@@ -1,3 +1,5 @@
+"""Development entry point for the Flask app."""
+
 import os
 
 from app import create_app

@@ -1,3 +1,5 @@
+"""Application factory and app-wide setup."""
+
 import logging
 import os
 

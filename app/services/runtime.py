@@ -8,7 +8,10 @@ import pandas as pd
 
 
 class Runtime:
+    """Holds the currently active dataset in memory."""
+
     def __init__(self):
+        """Initialize with no dataset loaded."""
         # Latest query result; None until the first query runs.
         self.df: pd.DataFrame | None = None
 

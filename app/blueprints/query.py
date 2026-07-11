@@ -16,6 +16,7 @@ query_bp = Blueprint("query", __name__)
 
 @query_bp.route("/query", methods=["GET", "POST"])
 def query_interface():
+    """Answer a question: generate SQL, run it, and render the results."""
     table_name = session.get("table_name")
     chart_suggestions = []
 
@@ -70,6 +71,7 @@ def query_interface():
 
 @query_bp.route("/download_csv")
 def download_csv():
+    """Stream the active table as a downloadable CSV."""
     table_name = session.get("table_name")
     if not table_name:
         return "No table loaded", 400

@@ -49,8 +49,7 @@ def _require_key(config_key):
 
 
 def _build_model():
-    """Construct the configured provider's model. Imports are lazy so only the
-    active provider's SDK needs to be importable."""
+    """Construct the configured provider's model (imports are lazy per provider)."""
     provider = current_app.config["LLM_PROVIDER"].lower()
     model_name = current_app.config["LLM_MODEL"]
     logger.info("Building LLM model | provider=%s | model=%s", provider, model_name)

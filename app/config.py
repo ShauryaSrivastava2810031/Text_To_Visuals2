@@ -1,3 +1,5 @@
+"""Application configuration sourced from environment variables."""
+
 import os
 from typing import ClassVar
 

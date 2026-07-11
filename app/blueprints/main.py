@@ -29,12 +29,14 @@ main_bp = Blueprint("main", __name__)
 
 
 def allowed_file(filename):
+    """Return True if the filename has an allowed extension."""
     ext = filename.rsplit(".", 1)[-1].lower()
     return "." in filename and ext in current_app.config["ALLOWED_EXTENSIONS"]
 
 
 @main_bp.route("/", methods=["GET", "POST"])
 def upload_file():
+    """Handle dataset upload and load it into the database."""
     if request.method == "POST":
         if "file" not in request.files:
             return "No file part"
