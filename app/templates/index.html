@@ -210,7 +210,7 @@
             return Object.assign(base, {
                 xAxis: catAxis, yAxis: valAxis, dataZoom: zoom,
                 grid: { left: 12, right: 20, top: 54, bottom: 64, containLabel: true },
-                series: [{ type: "line", data: p.y, smooth: true, symbol: "circle", symbolSize: 7,
+                series: [{ type: "line", data: p.y, smooth: false, symbol: "circle", symbolSize: 7,
                     lineStyle: { width: 3, color: c.accent }, itemStyle: { color: c.accent },
                     emphasis: { focus: "series" } }]
             });
@@ -220,7 +220,7 @@
             return Object.assign(base, {
                 xAxis: catAxis, yAxis: valAxis, dataZoom: zoom,
                 grid: { left: 12, right: 20, top: 54, bottom: 64, containLabel: true },
-                series: [{ type: "line", data: p.y, smooth: true, symbol: "none",
+                series: [{ type: "line", data: p.y, smooth: false, symbol: "none",
                     lineStyle: { width: 2.5, color: c.accent },
                     areaStyle: { color: grad(c.dark ? "rgba(129,140,248,.45)" : "rgba(99,102,241,.35)", "rgba(99,102,241,0.02)") } }]
             });

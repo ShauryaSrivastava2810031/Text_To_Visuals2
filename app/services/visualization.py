@@ -92,6 +92,15 @@ def _log_usage(result):
         logger.info("LLM usage: %s", result.usage)
 
 
+def _to_numeric(series):
+    """Coerce a Series to numbers, tolerating thousands separators and stray
+    currency/percent symbols (e.g. "25,637.80" -> 25637.8) before falling back
+    to NaN for anything genuinely non-numeric.
+    """
+    cleaned = series.astype(str).str.replace(r"[,\s₹$%]", "", regex=True)
+    return pd.to_numeric(cleaned, errors="coerce")
+
+
 def build_chart_payload(df, chart_type):
     """Prepare the JSON data ECharts needs to render `chart_type`.
 
@@ -103,7 +112,7 @@ def build_chart_payload(df, chart_type):
     )
 
     if chart_type == "Histogram":
-        series = pd.to_numeric(df[cols[0]], errors="coerce").dropna()
+        series = _to_numeric(df[cols[0]]).dropna()
         if series.empty:
             return {"error": "The first column has no numeric values to plot."}
         bins = int(min(20, max(5, round(len(series) ** 0.5))))
@@ -118,8 +127,8 @@ def build_chart_payload(df, chart_type):
         return {"error": "This chart needs at least two columns."}
 
     if chart_type == "Scatter Plot":
-        x = pd.to_numeric(df[cols[0]], errors="coerce")
-        y = pd.to_numeric(df[cols[1]], errors="coerce")
+        x = _to_numeric(df[cols[0]])
+        y = _to_numeric(df[cols[1]])
         mask = x.notna() & y.notna()
         return {
             "chart_type": chart_type, "x_name": cols[0], "y_name": cols[1],
@@ -130,7 +139,7 @@ def build_chart_payload(df, chart_type):
 
     # Bar / Line / Area / Pie: first column = labels, second = numeric measure.
     x = df[cols[0]].astype(str).tolist()
-    y = pd.to_numeric(df[cols[1]], errors="coerce").fillna(0)
+    y = _to_numeric(df[cols[1]]).fillna(0)
     return {
         "chart_type": chart_type, "x_name": cols[0], "y_name": cols[1],
         "x": x, "y": [float(v) for v in y],

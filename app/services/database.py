@@ -16,8 +16,15 @@ def get_engine():
 
 
 def sanitize_column_name(name):
-    """Normalize a column or table name to a safe snake_case identifier."""
-    return re.sub(r"\W+", "_", name).lower()
+    """Normalize a column or table name to a safe snake_case identifier.
+
+    Also prefixes an underscore when the result would start with a digit, since
+    unquoted SQL identifiers may not begin with a number (e.g. "52w_h" -> "_52w_h").
+    """
+    identifier = re.sub(r"\W+", "_", name).lower()
+    if identifier and identifier[0].isdigit():
+        identifier = f"_{identifier}"
+    return identifier
 
 
 def detect_column_type(series):
