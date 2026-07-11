@@ -76,7 +76,7 @@ def download_csv():
     if not table_name:
         return "No table loaded", 400
 
-    df = pd.read_sql_table(table_name, con=get_engine())
+    df = pd.read_sql_table(str(table_name), con=get_engine())
     csv_data = df.to_csv(index=False)
 
     return Response(
