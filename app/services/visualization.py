@@ -13,32 +13,55 @@ import pandas as pd
 from pydantic_ai import Agent
 
 from .llm import get_model, run_with_backoff
-from .schemas import ChartSuggestions
+from .schemas import Aggregation, ChartSpec, ChartSuggestions, SortOrder
 
 logger = logging.getLogger("t2v.viz")
 
-# Charts to prioritize when the dataset is time-based.
-_TIME_PREFERRED = ["Line Chart", "Bar Chart", "Area Chart"]
-
 VIZ_SYSTEM_PROMPT = """
 You are a data-visualization expert. Given the columns (with types) and a sample
-of a query RESULT, recommend the three most suitable chart types, best first.
+of a query RESULT, suggest THREE short, natural-language chart ideas the user
+could ask for, best first.
 
-The app renders a chart from the first two result columns: the first column is
-the x-axis (category, label, or date) and the second is the y-axis (numeric
-measure). Recommend charts that fit that shape and the column types.
+Each idea must be a self-contained instruction that can be executed by reshaping
+THIS result alone (no new data is available) — reordering columns, grouping and
+aggregating (sum/count/mean), sorting, or taking a top-N. Reference the result's
+actual column names in plain language.
 
-Choose only from these exact names:
+Write them the way a person would ask, for example:
+- "Show total <measure> by <category>"
+- "Show the trend of <measure> over <date column>"
+- "Show the top 10 <category> by <measure>"
+- "Show the share of <measure> across <category>"
+
+Keep each idea under ~8 words. Return three distinct, genuinely useful ideas.
+"""
+
+CHART_SPEC_SYSTEM_PROMPT = """
+You turn a natural-language chart request into a chart plan over an existing
+query RESULT. You may ONLY use the columns listed in the user message — no new
+data can be fetched.
+
+Choose a chart_type from exactly these names:
 "Bar Chart", "Line Chart", "Area Chart", "Pie Chart", "Scatter Plot", "Histogram".
 
-Guidance:
-- Date/time column + numeric   -> "Line Chart" or "Area Chart" (trends over time).
-- Categorical column + numeric -> "Bar Chart"; use "Pie Chart" only when there
-  are few categories (<= 6) that represent parts of a whole.
-- Two numeric columns          -> "Scatter Plot" (relationship between values).
-- A single numeric column      -> "Histogram" (distribution).
+Rules:
+- x_column and y_column MUST be exact column names from the provided list.
+- Pick the shape that fits the request and column types:
+  - date/time x + numeric y      -> "Line Chart" or "Area Chart" (trends).
+  - categorical x + numeric y     -> "Bar Chart"; "Pie Chart" only for a few
+    parts-of-a-whole categories.
+  - two numeric columns           -> "Scatter Plot".
+  - one numeric column, distribution -> "Histogram" (set y_column to null).
+- aggregation: use sum/count/mean/min/max when the request implies grouping the
+  measure per x category (e.g. "total sales by region"); otherwise "none".
+  Use "count" (y_column may be null) for "how many ... per ..." requests.
+- sort/limit: set for "top/bottom N" or "highest/lowest" requests; else none.
 
-Return three distinct charts that are genuinely appropriate for this result.
+SCOPE:
+- If scope is "whole", plot the result as-is: aggregation "none", sort "none",
+  no limit, x_column = first column, y_column = second column (or null for a
+  single-column histogram).
+- If scope is "result", you may subset/aggregate/sort as the request implies.
 """
 
 @cache
@@ -48,42 +71,148 @@ def _get_viz_agent():
     )
 
 
-def analyze_visualization(df):
-    """Return up to three recommended chart names for the given DataFrame."""
-    sample_data = df.head(5).to_dict(orient="records")
-    column_info = {col: str(df[col].dtype) for col in df.columns}
-    contains_time_column = any(
-        dtype in ["datetime64[ns]", "DATE", "TIMESTAMP"]
-        for dtype in column_info.values()
+@cache
+def _get_spec_agent():
+    return Agent(
+        get_model(), output_type=ChartSpec, system_prompt=CHART_SPEC_SYSTEM_PROMPT
     )
+
+
+def _describe_result(df):
+    """Return (column->dtype, sample rows) used to prompt the LLM about a result."""
+    return (
+        {col: str(df[col].dtype) for col in df.columns},
+        df.head(5).to_dict(orient="records"),
+    )
+
+
+def analyze_visualization(df):
+    """Return up to three descriptive, executable chart ideas for the DataFrame."""
+    column_info, sample_data = _describe_result(df)
 
     prompt = (
         f"Result columns and types: {column_info}\n"
         f"Sample rows: {sample_data}\n\n"
-        f"Recommend the best three charts for this result."
+        f"Suggest three chart ideas for this result."
     )
 
-    logger.info(
-        "Chart suggestion request | columns=%s | time_based=%s",
-        list(column_info.keys()),
-        contains_time_column,
-    )
+    logger.info("Chart idea request | columns=%s", list(column_info.keys()))
 
     try:
         result = run_with_backoff(lambda: _get_viz_agent().run_sync(prompt))
-        chart_suggestions = [chart.value for chart in result.output.charts]
-        logger.info("LLM suggested charts (raw): %s", chart_suggestions)
+        ideas = [idea.strip() for idea in result.output.ideas if idea.strip()]
+        logger.info("LLM suggested chart ideas: %s", ideas)
         _log_usage(result)
     except Exception:
-        logger.exception("Chart suggestion failed")
+        logger.exception("Chart idea suggestion failed")
         return []  # let the caller render without suggestions
 
-    if contains_time_column:
-        chart_suggestions = sorted(
-            chart_suggestions, key=lambda x: x in _TIME_PREFERRED, reverse=True
+    return ideas
+
+
+def generate_chart_spec(df, description, scope):
+    """Turn a natural-language `description` into a validated ChartSpec over `df`.
+
+    `scope` is "result" (may subset/aggregate) or "whole" (plot the result
+    as-is). Returns a ChartSpec whose columns are guaranteed to exist in `df`.
+    """
+    column_info, sample_data = _describe_result(df)
+
+    prompt = (
+        f"Result columns and types: {column_info}\n"
+        f"Sample rows: {sample_data}\n"
+        f"Scope: {scope}\n\n"
+        f"Chart request: {description}"
+    )
+
+    logger.info(
+        "Chart spec request | scope=%s | columns=%s | request=%r",
+        scope, list(column_info.keys()), description,
+    )
+
+    result = run_with_backoff(lambda: _get_spec_agent().run_sync(prompt))
+    spec = result.output
+    _log_usage(result)
+    logger.info("LLM chart spec (raw): %s", spec)
+
+    return _sanitize_spec(spec, df, scope)
+
+
+def _sanitize_spec(spec, df, scope="result"):
+    """Force the spec's columns to real ones, defaulting to the first two."""
+    cols = list(df.columns)
+    if spec.x_column not in cols:
+        spec.x_column = cols[0]
+    if spec.y_column is not None and spec.y_column not in cols:
+        spec.y_column = cols[1] if len(cols) > 1 else None
+    # x and y must differ, or shaped[[x, y]] yields duplicate columns.
+    if spec.y_column == spec.x_column:
+        others = [c for c in cols if c != spec.x_column]
+        spec.y_column = others[0] if others else None
+    # "whole" means plot the result as-is; don't let the model reshape it.
+    if scope == "whole":
+        spec.x_column = cols[0]
+        spec.y_column = cols[1] if len(cols) > 1 else None
+        spec.aggregation = Aggregation.none
+        spec.sort = SortOrder.none
+        spec.limit = None
+    return spec
+
+
+_AGG_FUNCS = {
+    Aggregation.sum: "sum",
+    Aggregation.mean: "mean",
+    Aggregation.min: "min",
+    Aggregation.max: "max",
+}
+
+
+def apply_chart_spec(df, spec):
+    """Reshape `df` per `spec` (group/aggregate/sort/limit) and return a payload.
+
+    Only columns already in `df` are used. Returns the same dict shape as
+    `build_chart_payload`, including an {"error": ...} message on failure.
+    """
+    x, y = spec.x_column, spec.y_column
+
+    # Histograms only need the single (numeric) column.
+    if spec.chart_type == "Histogram":
+        return build_chart_payload(df[[x]], "Histogram")
+
+    if y is None and spec.aggregation != Aggregation.count:
+        return {"error": "This chart needs a value column to plot."}
+
+    shaped = df
+
+    if spec.aggregation == Aggregation.count:
+        # Avoid clashing with an existing column literally named "count".
+        count_col = "count"
+        while count_col in df.columns:
+            count_col = f"_{count_col}"
+        grouped = df.groupby(x, sort=False, dropna=False).size().reset_index(name=count_col)
+        shaped, y = grouped, count_col
+    elif spec.aggregation in _AGG_FUNCS:
+        values = _to_numeric(df[y])
+        grouped = (
+            pd.DataFrame({x: df[x], y: values})
+            .groupby(x, sort=False, dropna=False)[y]
+            .agg(_AGG_FUNCS[spec.aggregation])
+            .reset_index()
         )
-    logger.info("Final chart suggestions: %s", chart_suggestions)
-    return chart_suggestions
+        shaped = grouped
+
+    if spec.sort != SortOrder.none and y in shaped.columns:
+        shaped = shaped.sort_values(
+            y, ascending=(spec.sort == SortOrder.asc),
+            key=lambda s: _to_numeric(s),
+        )
+
+    if spec.limit and spec.limit > 0:
+        shaped = shaped.head(spec.limit)
+
+    payload = build_chart_payload(shaped[[x, y]], spec.chart_type)
+    payload.setdefault("scope_columns", [x, y])
+    return payload
 
 
 def _log_usage(result):

@@ -30,6 +30,29 @@ app/
 
 ## Setup
 
+With [`just`](https://just.systems) installed, the whole local setup is two
+commands:
+
+```bash
+just setup     # venv + dependencies + .env + database migrations
+just dev       # serves on http://localhost:8000
+```
+
+Then edit `.env` with your real keys. Run `just` with no argument to list every
+recipe:
+
+| Recipe        | What it does                                             |
+|---------------|----------------------------------------------------------|
+| `just setup`  | Create the venv, install deps, create `.env`, run migrations |
+| `just dev`    | Start the dev server (auto-reload if `FLASK_DEBUG=1`)    |
+| `just update` | Reinstall deps after `requirements.txt` changes          |
+| `just db`     | Apply database migrations (no-op until a tool is added)  |
+| `just serve`  | Run gunicorn (Linux/macOS, production-like)              |
+| `just clean`  | Remove the venv                                          |
+
+<details>
+<summary>Manual setup (without <code>just</code>)</summary>
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # Windows
@@ -38,6 +61,7 @@ pip install -r requirements.txt
 copy .env.example .env            # then fill in real values
 python run.py                     # serves on http://localhost:8000
 ```
+</details>
 
 Deployment entry point (e.g. Azure/gunicorn): `run:app`
 (`gunicorn run:app`).
